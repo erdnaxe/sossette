@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2023-2025 erdnaxe
+# SPDX-License-Identifier: CC0-1.0
+
+[package]
+name = "sossette"
+authors = ["erdnaxe <erdnaxe@crans.org>"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.4", features = ["derive", "env"] }
+clap-verbosity-flag = "3.0"
+command-group = { version = "5.0", features = ["with-tokio"] }
+env_logger = "0.11"
+log = "0.4"
+rand = "0.8"
+sha2 = "0.10"
+tokio = { version = "1.43", features = ["rt-multi-thread", "io-util", "signal", "net", "time", "process", "macros"] }
+
+[profile.release]
+strip = true
+lto = true
+panic = "abort"

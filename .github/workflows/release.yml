@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2023-2025 erdnaxe
+# SPDX-License-Identifier: CC0-1.0
+
+name: Handle release
+
+on:
+  release:
+    types: [ "created" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Add x86_64-unknown-linux-musl target
+      run: rustup target add x86_64-unknown-linux-musl
+    - name: Build release
+      run: cargo build --release
+    - name: Upload binaries to release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: target/x86_64-unknown-linux-musl/release/sossette
+        tag: ${{ github.ref }}
+        overwrite: true

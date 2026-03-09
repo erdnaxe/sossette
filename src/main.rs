@@ -3,6 +3,7 @@
 
 mod handler;
 mod pow;
+mod proxy;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -35,6 +36,14 @@ struct Args {
     #[arg(long, value_name = "STRING", env = "WRAPPER_POW_BACKDOOR")]
     pow_backdoor: Option<String>,
 
+    /// Enable PROXY protocol v2 parsing to extract real client IP
+    #[arg(long, env = "WRAPPER_PROXY_PROTOCOL")]
+    proxy_protocol: bool,
+
+    /// Require PROXY protocol header, reject connections without it
+    #[arg(long, env = "WRAPPER_PROXY_PROTOCOL_REQUIRED")]
+    proxy_protocol_required: bool,
+
     #[command(flatten)]
     verbose: Verbosity<InfoLevel>,
 
@@ -60,7 +69,7 @@ async fn serve(args: Args) -> Result<()> {
                 // Spawn task to handle this client
                 let my_args = args.clone();
                 tokio::spawn(async move {
-                    match handler::handle_client(socket, my_args).await {
+                    match handler::handle_client(socket, peer_addr, my_args).await {
                         Ok(()) => {
                             info!("Client {:?} disconnected", peer_addr)
                         }

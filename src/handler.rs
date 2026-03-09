@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: 2023-2025 erdnaxe
 // SPDX-License-Identifier: MIT
 
-use crate::pow;
 use crate::Args;
+use crate::pow;
+use crate::proxy;
 
+use std::net::SocketAddr;
 use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use command_group::AsyncCommandGroup;
-use log::debug;
+use log::{debug, info, warn};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::process::Command;
@@ -61,7 +63,38 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
 ///
 /// Spawn one process and then spawn 3 tasks to manage input, output and
 /// timeout. If one of these tasks reach its end, kill the process.
-pub async fn handle_client(mut socket: TcpStream, args: Args) -> Result<()> {
+pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: Args) -> Result<()> {
+    // Parse PROXY protocol header if enabled
+    let proxy_info = if args.proxy_protocol || args.proxy_protocol_required {
+        match proxy::parse_proxy_v2_header(&mut socket).await {
+            Ok(info) => {
+                if let Some(ref proxy_info) = info {
+                    info!(
+                        "Real client: {}:{} (via proxy {})",
+                        proxy_info.src_addr, proxy_info.src_port, peer_addr
+                    );
+                } else {
+                    debug!("PROXY protocol LOCAL command (health check)");
+                }
+                info
+            }
+            Err(e) => {
+                if args.proxy_protocol_required {
+                    warn!(
+                        "Rejecting connection from {} due to PROXY protocol error: {:?}",
+                        peer_addr, e
+                    );
+                    return Err(e);
+                } else {
+                    debug!("PROXY protocol parsing failed (continuing anyway): {:?}", e);
+                    None
+                }
+            }
+        }
+    } else {
+        None
+    };
+
     // Send message of the day
     if let Some(motd) = &args.motd {
         socket.write_all(motd.as_bytes()).await?;
@@ -80,6 +113,15 @@ pub async fn handle_client(mut socket: TcpStream, args: Args) -> Result<()> {
     let mut command = Command::new(&args.command);
     command.args(&args.arguments);
     command.stdin(Stdio::piped()).stdout(Stdio::piped());
+
+    // Pass PROXY protocol information to child process via environment variables
+    if let Some(ref proxy_info) = proxy_info {
+        command.env("CLIENT_IP", proxy_info.src_addr.to_string());
+        command.env("CLIENT_PORT", proxy_info.src_port.to_string());
+        command.env("PROXY_DEST_IP", proxy_info.dst_addr.to_string());
+        command.env("PROXY_DEST_PORT", proxy_info.dst_port.to_string());
+    }
+
     let mut child = command.group_spawn().context("Failed to run command")?;
     let child_stdin = child.inner().stdin.take().context("Failed to open stdin")?;
     let child_stdout = child

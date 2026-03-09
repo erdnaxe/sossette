@@ -54,10 +54,8 @@ pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker:
     }
 
     // Backdoor for staff testing
-    if let Some(backdoor_str) = backdoor {
-        if backdoor_str.as_bytes() == &buf[..buf_n] {
+    if let Some(backdoor_str) = backdoor && backdoor_str.as_bytes() == &buf[..buf_n] {
             return Ok(true);
-        }
     }
 
     // Compute hash

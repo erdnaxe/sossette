@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::{Context, Result};
-use rand::distributions::Alphanumeric;
-use rand::{thread_rng, Rng};
+use rand::RngExt;
+use rand::distr::Alphanumeric;
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -20,7 +20,7 @@ pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker:
     backdoor: Option<&String>,
 ) -> Result<bool> {
     // Generate prefix using OS random
-    let prefix: [u8; 16] = thread_rng()
+    let prefix: [u8; 16] = rand::rng()
         .sample_iter(Alphanumeric)
         .take(16)
         .collect::<Vec<u8>>()

@@ -29,13 +29,16 @@ async fn process_stdin<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
         if n == 0 {
             return Ok(()); // socket closed
         }
-        if in_buf[0] == 3 {
+        if in_buf.first() == Some(&3) {
             debug!("Client sent Ctrl-C");
             return Ok(());
         }
-        debug!("Writting to stdin: {:?}", &in_buf[0..n]);
+        let data = in_buf
+            .get(..n)
+            .context("stdin read index out of bounds")?;
+        debug!("Writting to stdin: {data:?}");
         child_stdin
-            .write_all(&in_buf[0..n])
+            .write_all(data)
             .await
             .context("Failed to write to stdin")?;
     }
@@ -52,8 +55,12 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
         if n == 0 {
             return Ok(()); // process closed
         }
+        let data = out_buf
+            .get(..n)
+            .context("stdout read index out of bounds")?;
+        debug!("Reading from stdout: {data:?}");
         socket
-            .write_all(&out_buf[0..n])
+            .write_all(data)
             .await
             .context("Failed to write to socket")?;
     }
@@ -80,8 +87,7 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
             }
             Err(e) => {
                 warn!(
-                    "Rejecting connection from {} due to PROXY protocol error: {:?}",
-                    peer_addr, e
+                    "Rejecting connection from {peer_addr} due to PROXY protocol error: {e:?}"
                 );
                 return Err(e);
             }
@@ -98,7 +104,7 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
 
     // Proof-of-work prompt
     if args.pow > 0 {
-        let valid = pow::proof_of_work_prompt(&mut socket, args.pow, &args.pow_backdoor).await?;
+        let valid = pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor.as_ref()).await?;
         if !valid {
             return Ok(());
         }

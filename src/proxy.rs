@@ -35,7 +35,7 @@ pub struct ProxyInfo {
 }
 
 impl ProxyInfo {
-    pub fn new(src_addr: IpAddr, src_port: u16, dst_addr: IpAddr, dst_port: u16) -> Self {
+    pub const fn new(src_addr: IpAddr, src_port: u16, dst_addr: IpAddr, dst_port: u16) -> Self {
         Self {
             src_addr,
             src_port,
@@ -68,7 +68,7 @@ pub async fn parse_proxy_v2_header<R: AsyncReadExt + Unpin>(
     let command = version_command & COMMAND_MASK;
 
     if addr_len > MAX_PROXY_ADDR_LEN {
-        return Err(anyhow!("PROXY header too large: {}", addr_len));
+        return Err(anyhow!("PROXY header too large: {addr_len}"));
     }
 
     // Handle LOCAL command
@@ -81,14 +81,14 @@ pub async fn parse_proxy_v2_header<R: AsyncReadExt + Unpin>(
     }
 
     if command != CMD_PROXY {
-        return Err(anyhow!("Unsupported PROXY command: {}", command));
+        return Err(anyhow!("Unsupported PROXY command: {command}"));
     }
 
     let family = family_protocol & 0xF0;
     let protocol = family_protocol & 0x0F;
 
     if protocol != PROTO_STREAM {
-        return Err(anyhow!("Unsupported transport protocol: {}", protocol));
+        return Err(anyhow!("Unsupported transport protocol: {protocol}"));
     }
 
     match family {
@@ -102,7 +102,7 @@ pub async fn parse_proxy_v2_header<R: AsyncReadExt + Unpin>(
             Ok(None)
         }
         AF_UNIX => Err(anyhow!("UNIX addresses not supported")),
-        _ => Err(anyhow!("Unknown address family: {}", family)),
+        _ => Err(anyhow!("Unknown address family: {family}")),
     }
 }
 
@@ -112,15 +112,17 @@ async fn parse_ipv4<R: AsyncReadExt + Unpin>(
     addr_len: usize,
 ) -> Result<Option<ProxyInfo>> {
     if addr_len < 12 {
-        return Err(anyhow!("IPv4 address block too short: {}", addr_len));
+        return Err(anyhow!("IPv4 address block too short: {addr_len}"));
     }
 
     let mut addr = [0u8; 12];
     timeout(READ_TIMEOUT, stream.read_exact(&mut addr)).await??;
 
-    // Skip extra TLV bytes if any
     if addr_len > 12 {
-        let mut discard = vec![0u8; addr_len - 12];
+        let tlv_len = addr_len
+            .checked_sub(12)
+            .ok_or_else(|| anyhow!("IPv4 address length underflow"))?;
+        let mut discard = vec![0u8; tlv_len];
         timeout(READ_TIMEOUT, stream.read_exact(&mut discard)).await??;
     }
 
@@ -143,14 +145,17 @@ async fn parse_ipv6<R: AsyncReadExt + Unpin>(
     addr_len: usize,
 ) -> Result<Option<ProxyInfo>> {
     if addr_len < 36 {
-        return Err(anyhow!("IPv6 address block too short: {}", addr_len));
+        return Err(anyhow!("IPv6 address block too short: {addr_len}"));
     }
 
     let mut addr = [0u8; 36];
     timeout(READ_TIMEOUT, stream.read_exact(&mut addr)).await??;
 
     if addr_len > 36 {
-        let mut discard = vec![0u8; addr_len - 36];
+        let tlv_len = addr_len
+            .checked_sub(36)
+            .ok_or_else(|| anyhow!("IPv6 address length underflow"))?;
+        let mut discard = vec![0u8; tlv_len];
         timeout(READ_TIMEOUT, stream.read_exact(&mut discard)).await??;
     }
 

@@ -72,7 +72,7 @@ Sossette supports the [PROXY protocol v2](https://github.com/haproxy/haproxy/blo
 
 ### Usage
 
-Enable PROXY protocol parsing with the `--proxy-protocol` flag:
+Enable PROXY protocol v2 with the `--proxy-protocol` flag. When enabled, a valid PROXY protocol v2 header is **required** and connections without one are rejected:
 
 ```bash
 $ sossette --proxy-protocol -l 0.0.0.0:4000 cat
@@ -82,12 +82,6 @@ Or using the environment variable:
 
 ```bash
 $ WRAPPER_PROXY_PROTOCOL=true sossette -l 0.0.0.0:4000 cat
-```
-
-To **require** PROXY protocol headers and reject connections without them:
-
-```bash
-$ sossette --proxy-protocol-required -l 0.0.0.0:4000 cat
 ```
 
 ### Accessing client information

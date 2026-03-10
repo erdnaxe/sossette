@@ -36,13 +36,9 @@ struct Args {
     #[arg(long, value_name = "STRING", env = "WRAPPER_POW_BACKDOOR")]
     pow_backdoor: Option<String>,
 
-    /// Enable PROXY protocol v2 parsing to extract real client IP
+    /// Require PROXY protocol v2 header, reject connections without it
     #[arg(long, env = "WRAPPER_PROXY_PROTOCOL")]
     proxy_protocol: bool,
-
-    /// Require PROXY protocol header, reject connections without it
-    #[arg(long, env = "WRAPPER_PROXY_PROTOCOL_REQUIRED")]
-    proxy_protocol_required: bool,
 
     #[command(flatten)]
     verbose: Verbosity<InfoLevel>,

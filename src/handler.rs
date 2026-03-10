@@ -65,7 +65,7 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
 /// timeout. If one of these tasks reach its end, kill the process.
 pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: Args) -> Result<()> {
     // Parse PROXY protocol header if enabled
-    let proxy_info = if args.proxy_protocol || args.proxy_protocol_required {
+    let proxy_info = if args.proxy_protocol {
         match proxy::parse_proxy_v2_header(&mut socket).await {
             Ok(info) => {
                 if let Some(ref proxy_info) = info {
@@ -79,16 +79,11 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
                 info
             }
             Err(e) => {
-                if args.proxy_protocol_required {
-                    warn!(
-                        "Rejecting connection from {} due to PROXY protocol error: {:?}",
-                        peer_addr, e
-                    );
-                    return Err(e);
-                } else {
-                    debug!("PROXY protocol parsing failed (continuing anyway): {:?}", e);
-                    None
-                }
+                warn!(
+                    "Rejecting connection from {} due to PROXY protocol error: {:?}",
+                    peer_addr, e
+                );
+                return Err(e);
             }
         }
     } else {

@@ -18,6 +18,8 @@ use tokio::process::Command;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 
+const LOCAL_HEALTHCHECK_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// Handle message exchange from TCP socket to process stdin
 async fn process_stdin<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
     mut socket: R,
@@ -29,13 +31,7 @@ async fn process_stdin<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
         if n == 0 {
             return Ok(()); // socket closed
         }
-        if in_buf.first() == Some(&3) {
-            debug!("Client sent Ctrl-C");
-            return Ok(());
-        }
-        let data = in_buf
-            .get(..n)
-            .context("stdin read index out of bounds")?;
+        let data = in_buf.get(..n).context("stdin read index out of bounds")?;
         debug!("Writting to stdin: {data:?}");
         child_stdin
             .write_all(data)
@@ -71,24 +67,25 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
 /// Spawn one process and then spawn 3 tasks to manage input, output and
 /// timeout. If one of these tasks reach its end, kill the process.
 pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: Args) -> Result<()> {
+    let mut is_local_healthcheck = false;
+
     // Parse PROXY protocol header if enabled
     let proxy_info = if args.proxy_protocol {
         match proxy::parse_proxy_v2_header(&mut socket).await {
-            Ok(info) => {
-                if let Some(ref proxy_info) = info {
-                    info!(
-                        "Real client: {}:{} (via proxy {})",
-                        proxy_info.src_addr, proxy_info.src_port, peer_addr
-                    );
-                } else {
-                    debug!("PROXY protocol LOCAL command (health check)");
-                }
-                info
+            Ok(proxy::ProxyHeader::Proxied(info)) => {
+                info!(
+                    "Real client: {}:{} (via proxy {})",
+                    info.src_addr, info.src_port, peer_addr
+                );
+                Some(info)
+            }
+            Ok(proxy::ProxyHeader::Local) => {
+                is_local_healthcheck = true;
+                debug!("PROXY protocol LOCAL command (health check)");
+                None
             }
             Err(e) => {
-                warn!(
-                    "Rejecting connection from {peer_addr} due to PROXY protocol error: {e:?}"
-                );
+                warn!("Rejecting connection from {peer_addr} due to PROXY protocol error: {e:?}");
                 return Err(e);
             }
         }
@@ -96,17 +93,23 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
         None
     };
 
-    // Send message of the day
-    if let Some(motd) = &args.motd {
-        socket.write_all(motd.as_bytes()).await?;
-        socket.write_all(b"\r\n").await?;
-    }
+    // Wrapper prelude is skipped for HAProxy LOCAL health checks so they can
+    // talk directly to the wrapped binary.
+    if !is_local_healthcheck {
+        // MOTD
+        if let Some(motd) = &args.motd {
+            socket.write_all(motd.as_bytes()).await?;
+            socket.write_all(b"\r\n").await?;
+        }
 
-    // Proof-of-work prompt
-    if args.pow > 0 {
-        let valid = pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor.as_ref()).await?;
-        if !valid {
-            return Ok(());
+        // Proof-of-work
+        if args.pow > 0 {
+            let valid =
+                pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor.as_ref())
+                    .await?;
+            if !valid {
+                return Ok(());
+            }
         }
     }
 
@@ -115,7 +118,6 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
     command.args(&args.arguments);
     command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
-    // Pass PROXY protocol information to child process via environment variables
     if let Some(ref proxy_info) = proxy_info {
         command.env("CLIENT_IP", proxy_info.src_addr.to_string());
         command.env("CLIENT_PORT", proxy_info.src_port.to_string());
@@ -124,6 +126,7 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
     }
 
     let mut child = command.group_spawn().context("Failed to run command")?;
+
     let child_stdin = child.inner().stdin.take().context("Failed to open stdin")?;
     let child_stdout = child
         .inner()
@@ -131,22 +134,43 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
         .take()
         .context("Failed to open stdout")?;
 
-    // Start tasks
-    let mut set = JoinSet::new();
+    // Split socket
     let (read_half, write_half) = socket.into_split();
+
+    let mut set = JoinSet::new();
+
     set.spawn(async move { process_stdin(read_half, child_stdin).await });
+
     set.spawn(async move { process_stdout(write_half, child_stdout).await });
-    if let Some(timeout) = args.timeout {
+
+    let session_timeout = if is_local_healthcheck {
+        Some(match args.timeout {
+            Some(timeout) => Duration::from_secs(timeout).min(LOCAL_HEALTHCHECK_TIMEOUT),
+            None => LOCAL_HEALTHCHECK_TIMEOUT,
+        })
+    } else {
+        args.timeout.map(Duration::from_secs)
+    };
+
+    if let Some(timeout) = session_timeout {
         set.spawn(async move {
-            sleep(Duration::from_secs(timeout)).await;
+            sleep(timeout).await;
             debug!("Timeout reached");
             Ok(())
         });
     }
 
-    // If one task exits, drop the others
-    // Child group should always be killed before dropping child handle.
+    // Wait for first task to finish
     let res = set.join_next().await;
+
+    // Cancel remaining tasks immediately
+    set.abort_all();
+
+    // Kill the process group
     child.kill().await.context("Failed to kill process group")?;
+
+    // Await child to avoid zombie process
+    let _ = child.wait().await;
+
     res.unwrap_or(Ok(Ok(())))?
 }

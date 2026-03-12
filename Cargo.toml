@@ -26,6 +26,38 @@ tokio = { version = "1.5", features = [
     "macros",
 ] }
 
+[lints.rust]
+arithmetic_overflow = { level = "deny", priority = -1 }
+
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+missing-errors-doc = "allow"
+
+indexing_slicing = { level = "deny", priority = -1 }
+fallible_impl_from = { level = "deny", priority = -1 }
+wildcard_enum_match_arm = { level = "deny", priority = -1 }
+unneeded_field_pattern = { level = "deny", priority = -1 }
+fn_params_excessive_bools = { level = "deny", priority = -1 }
+must_use_candidate = { level = "deny", priority = -1 }
+checked_conversions = { level = "deny", priority = -1 }
+cast_possible_truncation = { level = "deny", priority = -1 }
+cast_sign_loss = { level = "deny", priority = -1 }
+cast_possible_wrap = { level = "deny", priority = -1 }
+cast_precision_loss = { level = "deny", priority = -1 }
+integer_division = { level = "deny", priority = -1 }
+arithmetic_side_effects = { level = "deny", priority = -1 }
+unchecked_time_subtraction = { level = "deny", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panicking_unwrap = { level = "deny", priority = -1 }
+option_env_unwrap = { level = "deny", priority = -1 }
+join_absolute_paths = { level = "deny", priority = -1 }
+serde_api_misuse = { level = "deny", priority = -1 }
+uninit_vec = { level = "deny", priority = -1 }
+transmute_ptr_to_ref = { level = "deny", priority = -1 }
+transmute_undefined_repr = { level = "deny", priority = -1 }
+
 [profile.release]
 codegen-units = 1
 lto = true

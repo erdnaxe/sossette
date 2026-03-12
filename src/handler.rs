@@ -18,8 +18,6 @@ use tokio::process::Command;
 use tokio::task::JoinSet;
 use tokio::time::sleep;
 
-const LOCAL_HEALTHCHECK_TIMEOUT: Duration = Duration::from_secs(1);
-
 /// Handle message exchange from TCP socket to process stdin
 async fn process_stdin<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
     mut socket: R,
@@ -66,22 +64,23 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
 ///
 /// Spawn one process and then spawn 3 tasks to manage input, output and
 /// timeout. If one of these tasks reach its end, kill the process.
-pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: Args) -> Result<()> {
-    let mut is_local_healthcheck = false;
-
+pub async fn handle_client(
+    mut socket: TcpStream,
+    peer_addr: SocketAddr,
+    args: Args,
+) -> Result<Option<proxy::ProxyInfo>> {
     // Parse PROXY protocol header if enabled
     let proxy_info = if args.proxy_protocol {
         match proxy::parse_proxy_v2_header(&mut socket).await {
             Ok(proxy::ProxyHeader::Proxied(info)) => {
                 info!(
-                    "Real client: {}:{} (via proxy {})",
+                    "Client: {}:{} (via proxy {}) connected",
                     info.src_addr, info.src_port, peer_addr
                 );
                 Some(info)
             }
             Ok(proxy::ProxyHeader::Local) => {
-                is_local_healthcheck = true;
-                debug!("PROXY protocol LOCAL command (health check)");
+                debug!("PROXY protocol LOCAL command");
                 None
             }
             Err(e) => {
@@ -93,23 +92,18 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
         None
     };
 
-    // Wrapper prelude is skipped for HAProxy LOCAL health checks so they can
-    // talk directly to the wrapped binary.
-    if !is_local_healthcheck {
-        // MOTD
-        if let Some(motd) = &args.motd {
-            socket.write_all(motd.as_bytes()).await?;
-            socket.write_all(b"\r\n").await?;
-        }
+    // MOTD
+    if let Some(motd) = &args.motd {
+        socket.write_all(motd.as_bytes()).await?;
+        socket.write_all(b"\r\n").await?;
+    }
 
-        // Proof-of-work
-        if args.pow > 0 {
-            let valid =
-                pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor.as_ref())
-                    .await?;
-            if !valid {
-                return Ok(());
-            }
+    // Proof-of-work
+    if args.pow > 0 {
+        let valid =
+            pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor.as_ref()).await?;
+        if !valid {
+            return Ok(proxy_info);
         }
     }
 
@@ -143,14 +137,7 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
 
     set.spawn(async move { process_stdout(write_half, child_stdout).await });
 
-    let session_timeout = if is_local_healthcheck {
-        Some(match args.timeout {
-            Some(timeout) => Duration::from_secs(timeout).min(LOCAL_HEALTHCHECK_TIMEOUT),
-            None => LOCAL_HEALTHCHECK_TIMEOUT,
-        })
-    } else {
-        args.timeout.map(Duration::from_secs)
-    };
+    let session_timeout = args.timeout.map(Duration::from_secs);
 
     if let Some(timeout) = session_timeout {
         set.spawn(async move {
@@ -172,5 +159,6 @@ pub async fn handle_client(mut socket: TcpStream, peer_addr: SocketAddr, args: A
     // Await child to avoid zombie process
     let _ = child.wait().await;
 
-    res.unwrap_or(Ok(Ok(())))?
+    res.unwrap_or(Ok(Ok(())))??;
+    Ok(proxy_info)
 }

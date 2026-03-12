@@ -66,7 +66,13 @@ async fn serve(args: Args) -> Result<()> {
                 let my_args = args.clone();
                 tokio::spawn(async move {
                     match handler::handle_client(socket, peer_addr, my_args).await {
-                        Ok(()) => {
+                        Ok(Some(proxy_info)) => {
+                            info!(
+                                "Client: {}:{} (via proxy {}) disconnected",
+                                proxy_info.src_addr, proxy_info.src_port, peer_addr
+                            );
+                        }
+                        Ok(None) => {
                             info!("Client {peer_addr:?} disconnected");
                         }
                         Err(e) => {

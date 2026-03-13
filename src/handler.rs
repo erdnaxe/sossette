@@ -112,13 +112,6 @@ pub async fn handle_client(
     command.args(&args.arguments);
     command.stdin(Stdio::piped()).stdout(Stdio::piped());
 
-    if let Some(ref proxy_info) = proxy_info {
-        command.env("CLIENT_IP", proxy_info.src_addr.to_string());
-        command.env("CLIENT_PORT", proxy_info.src_port.to_string());
-        command.env("PROXY_DEST_IP", proxy_info.dst_addr.to_string());
-        command.env("PROXY_DEST_PORT", proxy_info.dst_port.to_string());
-    }
-
     let mut child = command.group_spawn().context("Failed to run command")?;
 
     let child_stdin = child.inner().stdin.take().context("Failed to open stdin")?;

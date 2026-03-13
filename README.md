@@ -94,18 +94,6 @@ When PROXY protocol is enabled and a valid header is received, sossette:
    [2024-03-09T10:15:23Z INFO  sossette] Real client: 192.0.2.123:54321 (via proxy [::1]:55438)
    ```
 
-2. **Passes client information to the wrapped process** via environment variables:
-   - `CLIENT_IP`: The real client's IP address (e.g., `192.0.2.123`)
-   - `CLIENT_PORT`: The real client's source port (e.g., `54321`)
-   - `PROXY_DEST_IP`: The destination IP the client connected to
-   - `PROXY_DEST_PORT`: The destination port the client connected to
-
-   Example usage in a bash script:
-   ```bash
-   #!/bin/bash
-   echo "Welcome! Your IP is: $CLIENT_IP:$CLIENT_PORT"
-   ```
-
 ### Load balancer configuration
 
 #### HAProxy

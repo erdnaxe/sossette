@@ -61,6 +61,7 @@ async fn serve(args: Args) -> Result<()> {
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 info!("Client {peer_addr:?} connected");
+                info!("Client {peer_addr:?} connected");
 
                 // Spawn task to handle this client
                 let my_args = args.clone();
@@ -76,6 +77,7 @@ async fn serve(args: Args) -> Result<()> {
                             info!("Client {peer_addr:?} disconnected");
                         }
                         Err(e) => {
+                            warn!("Handling client {peer_addr:?} failed: {e:?}");
                             warn!("Handling client {peer_addr:?} failed: {e:?}");
                         }
                     }
@@ -105,6 +107,7 @@ async fn main() {
     match tokio::signal::ctrl_c().await {
         Ok(()) => {}
         Err(err) => {
+            warn!("Unable to listen for shutdown signal: {err}");
             warn!("Unable to listen for shutdown signal: {err}");
         }
     }

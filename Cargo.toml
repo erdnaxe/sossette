@@ -3,13 +3,17 @@
 
 [package]
 name = "sossette"
+description = "Alternative to socat for multi-user CTF challenges, developed for fcsc.fr"
+keywords = ["tcp", "ctf", "socat", "fcsc"]
+categories = ["command-line-utilities"]
+repository = "https://github.com/erdnaxe/sossette"
 authors = ["erdnaxe <erdnaxe@crans.org>"]
 version = "0.2.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 clap-verbosity-flag = "3.0"
 command-group = { version = "5.0", features = ["with-tokio"] }
 env_logger = "0.11"

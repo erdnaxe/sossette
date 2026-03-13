@@ -24,6 +24,8 @@ sha2 = "0.10"
 tokio = { version = "1.50", features = ["rt-multi-thread", "io-util", "signal", "net", "time", "process", "macros"] }
 
 [profile.release]
-strip = true
+codegen-units = 1
 lto = true
+opt-level = "z"
 panic = "abort"
+strip = true

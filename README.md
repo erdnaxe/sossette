@@ -66,6 +66,71 @@ world
 ^C
 ```
 
+## PROXY protocol support
+
+Sossette supports the [PROXY protocol v2](https://github.com/haproxy/haproxy/blob/master/doc/proxy-protocol.txt) to preserve client IP addresses when running behind a load balancer or reverse proxy.
+
+### Usage
+
+Enable PROXY protocol v2 with the `--proxy-protocol` flag. When enabled, a valid PROXY protocol v2 header is **required** and connections without one are rejected:
+
+```bash
+$ sossette --proxy-protocol -l 0.0.0.0:4000 cat
+```
+
+Or using the environment variable:
+
+```bash
+$ WRAPPER_PROXY_PROTOCOL=true sossette -l 0.0.0.0:4000 cat
+```
+
+### Accessing client information
+
+When PROXY protocol is enabled and a valid header is received, sossette:
+
+1. **Logs the real client IP** instead of the proxy's IP:
+   ```
+   [2024-03-09T10:15:23Z INFO  sossette] Client [::1]:55438 connected
+   [2024-03-09T10:15:23Z INFO  sossette] Real client: 192.0.2.123:54321 (via proxy [::1]:55438)
+   ```
+
+### Load balancer configuration
+
+#### HAProxy
+
+Configure HAProxy to send PROXY protocol v2 headers:
+
+```haproxy
+frontend tcp_front
+    bind *:443
+    mode tcp
+    default_backend tcp_back
+
+backend tcp_back
+    mode tcp
+    server sossette 127.0.0.1:4000 send-proxy-v2
+```
+
+#### nginx
+
+Configure nginx stream module with PROXY protocol:
+
+```nginx
+stream {
+    upstream sossette {
+        server 127.0.0.1:4000;
+    }
+
+    server {
+        listen 443;
+        proxy_pass sossette;
+        proxy_protocol on;
+    }
+}
+```
+
+**Security note**: When using PROXY protocol, ensure that only trusted load balancers can connect to sossette (e.g., using firewall rules). Otherwise, clients could spoof their IP addresses by sending fake PROXY protocol headers.
+
 ## Applying transformations to stdin
 
 `process_stdin` in [src/main.rs](./src/main.rs) can be easily patched to apply

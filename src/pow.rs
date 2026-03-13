@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2023-2025 erdnaxe
 // SPDX-License-Identifier: MIT
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use rand::RngExt;
 use rand::distr::Alphanumeric;
-use rand::{RngExt, rng};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -17,73 +17,92 @@ More details can be found on <https://fcsc.fr/pow>.\r\n";
 pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker::Unpin>(
     socket: &mut S,
     difficulty: u32,
-    backdoor: Option<String>,
+    backdoor: Option<&String>,
 ) -> Result<bool> {
     // Generate prefix using OS random
-    let prefix: [u8; 16] = rng()
+    let prefix: [u8; 16] = rand::rng()
         .sample_iter(Alphanumeric)
         .take(16)
         .collect::<Vec<u8>>()
         .as_slice()
         .try_into()
-        .unwrap();
+        .context("Failed to generate random prefix")?;
 
     // Prompt user
     socket.write_all(POW_HEADER_MESSAGE).await?;
-    let prompt = format!("Please provide an ASCII printable string S such that SHA256({} || S) starts with {} bits equal to 0 (the string concatenation is denoted ||): ", String::from_utf8(prefix.into())?, difficulty);
+    let prompt = format!(
+        "Please provide an ASCII printable string S such that SHA256({} || S) starts with {} bits equal to 0 (the string concatenation is denoted ||): ",
+        String::from_utf8(prefix.into())?,
+        difficulty
+    );
     socket.write_all(prompt.as_bytes()).await?;
-    let mut buf = [0; 256];
-    let mut buf_n = 0;
+    let mut buf = [0u8; 256];
+    let mut buf_n: usize = 0;
     while buf_n < 256 {
-        let n = socket.read(&mut buf[buf_n..=buf_n]).await?;
-        if n == 0 || buf[buf_n] == b'\x03' {
-            return Ok(false); // socket closed or Ctrl-C
+        let byte = buf
+            .get_mut(buf_n..=buf_n)
+            .context("read index out of bounds")?;
+        let n = socket.read(byte).await?;
+        if n == 0 {
+            return Ok(false); // socket closed
         }
-        if buf[buf_n] == b'\0' || buf[buf_n] == b'\n' {
+        let current = *buf.get(buf_n).context("index out of bounds")?;
+        if current == b'\0' || current == b'\n' {
             break; // telnet uses \r\0, netcat \r\n
         }
-        if buf[buf_n] >= 127 || buf[buf_n] < 32 {
+        if !(32..127).contains(&current) {
             continue; // ignore non ascii printable
         }
-        buf_n += n;
-    }
-    while buf_n > 0
-        && (buf[buf_n - 1] == b'\n' || buf[buf_n - 1] == b'\r' || buf[buf_n - 1] == b'\0')
-    {
-        buf_n -= 1; // trim input
+        buf_n = buf_n.checked_add(n).context("buffer index overflow")?;
     }
 
-    // Backdoor for staff testing
-    if let Some(backdoor_str) = backdoor
-        && backdoor_str.as_bytes() == &buf[..buf_n] {
-            return Ok(true);
+    // Trim trailing carriage return
+    if buf_n > 0 {
+        let last = *buf
+            .get(buf_n.checked_sub(1).context("underflow")?)
+            .context("index out of bounds")?;
+        if last == b'\r' {
+            buf_n = buf_n.checked_sub(1).context("underflow")?;
         }
+    }
 
-    // Compute hash
+    // Get the user input as a slice
+    let suffix = buf.get(..buf_n).context("slice out of bounds")?;
+
+    // Check backdoor
+    if let Some(bd) = backdoor
+        && suffix == bd.as_bytes()
+    {
+        return Ok(true);
+    }
+
+    // Verify proof of work
     let mut hasher = Sha256::new();
     hasher.update(prefix);
-    hasher.update(&buf[..buf_n]);
-    let hash: [u8; 32] = hasher.finalize().into();
+    hasher.update(suffix);
+    let hash = hasher.finalize();
+    Ok(check_leading_zeros(&hash, difficulty))
+}
 
-    // Count zeros
-    let mut measured_difficulty = 0;
-    for hash_byte in &hash {
-        if *hash_byte == 0 {
-            measured_difficulty += 8;
+/// Check that the hash starts with at least `difficulty` zero bits
+fn check_leading_zeros(hash: &[u8], difficulty: u32) -> bool {
+    let mut remaining = difficulty;
+    for &byte in hash {
+        if remaining == 0 {
+            return true;
+        }
+        if remaining >= 8 {
+            if byte != 0 {
+                return false;
+            }
+            remaining = remaining.saturating_sub(8);
         } else {
-            measured_difficulty += hash_byte.leading_zeros();
-            break;
+            // Check the top `remaining` bits of this byte
+            let mask = 0xFF_u8
+                .checked_shl(8_u32.saturating_sub(remaining))
+                .unwrap_or(0);
+            return byte & mask == 0;
         }
     }
-
-    if measured_difficulty < difficulty {
-        let message = format!(
-            "Wrong proof-of-work, hash starts with only {measured_difficulty} bits equal to 0.\r\n"
-        );
-        socket.write_all(message.as_bytes()).await?;
-        Ok(false)
-    } else {
-        socket.write_all(b"Thank you for solving our proof-of-work, we hope you had a great time! Launching challenge...\r\n\r\n").await?;
-        Ok(true)
-    }
+    remaining == 0
 }

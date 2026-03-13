@@ -3,6 +3,7 @@
 
 mod handler;
 mod pow;
+mod proxy;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -35,6 +36,10 @@ struct Args {
     #[arg(long, value_name = "STRING", env = "WRAPPER_POW_BACKDOOR")]
     pow_backdoor: Option<String>,
 
+    /// Require PROXY protocol v2 header, reject connections without it
+    #[arg(long, env = "WRAPPER_PROXY_PROTOCOL")]
+    proxy_protocol: bool,
+
     #[command(flatten)]
     verbose: Verbosity<InfoLevel>,
 
@@ -56,15 +61,23 @@ async fn serve(args: Args) -> Result<()> {
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
                 info!("Client {peer_addr:?} connected");
+                info!("Client {peer_addr:?} connected");
 
                 // Spawn task to handle this client
                 let my_args = args.clone();
                 tokio::spawn(async move {
-                    match handler::handle_client(socket, my_args).await {
-                        Ok(()) => {
+                    match handler::handle_client(socket, peer_addr, my_args).await {
+                        Ok(Some(proxy_info)) => {
+                            info!(
+                                "Client: {}:{} (via proxy {}) disconnected",
+                                proxy_info.src_addr, proxy_info.src_port, peer_addr
+                            );
+                        }
+                        Ok(None) => {
                             info!("Client {peer_addr:?} disconnected");
                         }
                         Err(e) => {
+                            warn!("Handling client {peer_addr:?} failed: {e:?}");
                             warn!("Handling client {peer_addr:?} failed: {e:?}");
                         }
                     }
@@ -95,6 +108,7 @@ async fn main() {
         Ok(()) => {}
         Err(err) => {
             warn!("Unable to listen for shutdown signal: {err}");
+            warn!("Unable to listen for shutdown signal: {err}");
         }
     }
 }
@@ -104,6 +118,6 @@ mod tests {
     #[test]
     fn verify_cli() {
         use clap::CommandFactory;
-        crate::Args::command().debug_assert()
+        crate::Args::command().debug_assert();
     }
 }

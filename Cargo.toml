@@ -8,20 +8,59 @@ keywords = ["tcp", "ctf", "socat", "fcsc"]
 categories = ["command-line-utilities"]
 repository = "https://github.com/erdnaxe/sossette"
 authors = ["erdnaxe <erdnaxe@crans.org>"]
-license = "MIT"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "4.5", features = ["derive", "env"] }
+clap = { version = "4.6", features = ["derive", "env"] }
 clap-verbosity-flag = "3.0"
 command-group = { version = "5.0", features = ["with-tokio"] }
 env_logger = "0.11"
 log = "0.4"
 rand = "0.10"
 sha2 = "0.10"
-tokio = { version = "1.50", features = ["rt-multi-thread", "io-util", "signal", "net", "time", "process", "macros"] }
+tokio = { version = "1.5", features = [
+    "rt-multi-thread",
+    "io-util",
+    "signal",
+    "net",
+    "time",
+    "process",
+    "macros",
+] }
+
+[lints.rust]
+arithmetic_overflow = { level = "deny", priority = -1 }
+
+[lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
+missing-errors-doc = "allow"
+
+indexing_slicing = { level = "deny", priority = -1 }
+fallible_impl_from = { level = "deny", priority = -1 }
+wildcard_enum_match_arm = { level = "deny", priority = -1 }
+unneeded_field_pattern = { level = "deny", priority = -1 }
+fn_params_excessive_bools = { level = "deny", priority = -1 }
+must_use_candidate = { level = "deny", priority = -1 }
+checked_conversions = { level = "deny", priority = -1 }
+cast_possible_truncation = { level = "deny", priority = -1 }
+cast_sign_loss = { level = "deny", priority = -1 }
+cast_possible_wrap = { level = "deny", priority = -1 }
+cast_precision_loss = { level = "deny", priority = -1 }
+integer_division = { level = "deny", priority = -1 }
+arithmetic_side_effects = { level = "deny", priority = -1 }
+unchecked_duration_subtraction = { level = "deny", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+panicking_unwrap = { level = "deny", priority = -1 }
+option_env_unwrap = { level = "deny", priority = -1 }
+join_absolute_paths = { level = "deny", priority = -1 }
+serde_api_misuse = { level = "deny", priority = -1 }
+uninit_vec = { level = "deny", priority = -1 }
+transmute_ptr_to_ref = { level = "deny", priority = -1 }
+transmute_undefined_repr = { level = "deny", priority = -1 }
 
 [profile.release]
 codegen-units = 1

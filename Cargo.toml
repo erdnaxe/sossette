@@ -47,7 +47,7 @@ cast_possible_wrap = { level = "deny", priority = -1 }
 cast_precision_loss = { level = "deny", priority = -1 }
 integer_division = { level = "deny", priority = -1 }
 arithmetic_side_effects = { level = "deny", priority = -1 }
-unchecked_time_subtraction = { level = "deny", priority = -1 }
+unchecked_duration_subtraction = { level = "deny", priority = -1 }
 unwrap_used = "warn"
 expect_used = "warn"
 panicking_unwrap = { level = "deny", priority = -1 }

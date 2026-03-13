@@ -23,7 +23,7 @@ async fn process_stdin<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
     mut socket: R,
     mut child_stdin: W,
 ) -> Result<()> {
-    let mut in_buf = [0; 1024];
+    let mut in_buf = [0u8; 1024];
     loop {
         let n = socket.read(&mut in_buf).await?;
         if n == 0 {
@@ -43,7 +43,7 @@ async fn process_stdout<R: AsyncReadExt + Unpin, W: AsyncWriteExt + Unpin>(
     mut socket: W,
     mut child_stdout: R,
 ) -> Result<()> {
-    let mut out_buf = [0; 1024];
+    let mut out_buf = [0u8; 1024];
     loop {
         let n = child_stdout.read(&mut out_buf).await?;
         if n == 0 {
@@ -74,8 +74,8 @@ pub async fn handle_client(
         match proxy::parse_proxy_v2_header(&mut socket).await {
             Ok(proxy::ProxyHeader::Proxied(info)) => {
                 info!(
-                    "Client: {}:{} (via proxy {}) connected",
-                    info.src_addr, info.src_port, peer_addr
+                    "Client: {}:{} -> {}:{} (via proxy {}) connected",
+                    info.src_addr, info.src_port, info.dst_addr, info.dst_port, peer_addr
                 );
                 Some(info)
             }
@@ -95,7 +95,7 @@ pub async fn handle_client(
     // MOTD
     if let Some(motd) = &args.motd {
         socket.write_all(motd.as_bytes()).await?;
-        socket.write_all(b"\r\n").await?;
+        socket.write_all(&b"\r\n"[..]).await?;
     }
 
     // Proof-of-work

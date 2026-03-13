@@ -17,7 +17,7 @@ More details can be found on <https://fcsc.fr/pow>.\r\n";
 pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker::Unpin>(
     socket: &mut S,
     difficulty: u32,
-    backdoor: &Option<String>,
+    backdoor: Option<String>,
 ) -> Result<bool> {
     // Generate prefix using OS random
     let prefix: [u8; 16] = rng()
@@ -35,7 +35,7 @@ pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker:
     let mut buf = [0; 256];
     let mut buf_n = 0;
     while buf_n < 256 {
-        let n = socket.read(&mut buf[buf_n..buf_n + 1]).await?;
+        let n = socket.read(&mut buf[buf_n..=buf_n]).await?;
         if n == 0 || buf[buf_n] == b'\x03' {
             return Ok(false); // socket closed or Ctrl-C
         }
@@ -54,11 +54,10 @@ pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker:
     }
 
     // Backdoor for staff testing
-    if let Some(backdoor_str) = backdoor {
-        if backdoor_str.as_bytes() == &buf[..buf_n] {
+    if let Some(backdoor_str) = backdoor
+        && backdoor_str.as_bytes() == &buf[..buf_n] {
             return Ok(true);
         }
-    }
 
     // Compute hash
     let mut hasher = Sha256::new();
@@ -68,7 +67,7 @@ pub async fn proof_of_work_prompt<S: AsyncReadExt + AsyncWriteExt + std::marker:
 
     // Count zeros
     let mut measured_difficulty = 0;
-    for hash_byte in hash.iter() {
+    for hash_byte in &hash {
         if *hash_byte == 0 {
             measured_difficulty += 8;
         } else {

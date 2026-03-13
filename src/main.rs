@@ -55,22 +55,22 @@ async fn serve(args: Args) -> Result<()> {
         // See https://docs.rs/tokio/latest/tokio/net/struct.TcpListener.html#errors
         match listener.accept().await {
             Ok((socket, peer_addr)) => {
-                info!("Client {:?} connected", peer_addr);
+                info!("Client {peer_addr:?} connected");
 
                 // Spawn task to handle this client
                 let my_args = args.clone();
                 tokio::spawn(async move {
                     match handler::handle_client(socket, my_args).await {
                         Ok(()) => {
-                            info!("Client {:?} disconnected", peer_addr)
+                            info!("Client {peer_addr:?} disconnected");
                         }
                         Err(e) => {
-                            warn!("Handling client {:?} failed: {:?}", peer_addr, e)
+                            warn!("Handling client {peer_addr:?} failed: {e:?}");
                         }
                     }
                 });
             }
-            Err(e) => warn!("Unable to accept client: {:?}", e),
+            Err(e) => warn!("Unable to accept client: {e:?}"),
         }
     }
 }
@@ -87,14 +87,14 @@ async fn main() {
     tokio::spawn(async move {
         match serve(args).await {
             Ok(()) => info!("Server stopped gracefully"),
-            Err(e) => error!("Server stopped due to an error: {:?}", e),
+            Err(e) => error!("Server stopped due to an error: {e:?}"),
         }
     });
 
     match tokio::signal::ctrl_c().await {
         Ok(()) => {}
         Err(err) => {
-            warn!("Unable to listen for shutdown signal: {}", err);
+            warn!("Unable to listen for shutdown signal: {err}");
         }
     }
 }

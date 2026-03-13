@@ -70,7 +70,7 @@ pub async fn handle_client(mut socket: TcpStream, args: Args) -> Result<()> {
 
     // Proof-of-work prompt
     if args.pow > 0 {
-        let valid = pow::proof_of_work_prompt(&mut socket, args.pow, &args.pow_backdoor).await?;
+        let valid = pow::proof_of_work_prompt(&mut socket, args.pow, args.pow_backdoor).await?;
         if !valid {
             return Ok(());
         }
